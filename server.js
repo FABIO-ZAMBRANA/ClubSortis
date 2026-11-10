@@ -32,7 +32,7 @@ if (!ADMIN_PASSWORD) {
 }
 
 const copyList = (list) => list.map((p) => ({ ...p }));
-const freshState = (base = []) => ({ participants: copyList(base), base, slots: buildSlots(base), history: [], prize: '', rest: 0 });
+const freshState = (base = [], attempts = 1) => ({ participants: copyList(base), base, slots: buildSlots(base), history: [], prize: '', rest: 0, attempts, attempt: 0 });
 
 function buildSlots(participants) {
   const rand = () => crypto.randomInt(1e9) / 1e9;
@@ -50,7 +50,7 @@ const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').tr
 function loadState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return s;
+    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, ...s };
   } catch {}
   return freshState();
 }
@@ -72,6 +72,8 @@ const publicState = () => ({
   history: state.history,
   prize: state.prize,
   rest: state.rest,
+  attempts: state.attempts,
+  attempt: state.attempt,
   viewers: clients.size,
   spin: spin && { id: spin.id, elapsed: Date.now() - spin.startedAt, duration: SPIN_MS, from: spin.from, fraction: spin.fraction, wheel: spin.wheel },
 });
@@ -147,7 +149,10 @@ function startSpin(res) {
   spin = { id: crypto.randomUUID(), startedAt: Date.now(), from: state.rest, fraction, wheel };
   broadcastState();
   setTimeout(() => {
-    const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, total, prize: state.prize, at: new Date().toISOString() };
+    state.attempt += 1;
+    const win = state.attempt >= state.attempts;
+    const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, total, prize: state.prize, win, attempt: state.attempt, attempts: state.attempts, at: new Date().toISOString() };
+    if (win) state.attempt = 0;
     const p = state.participants.find((x) => x.name === winner.name);
     if (p) p.cupos = Math.max(0, p.cupos - 1);
     state.slots.splice(ticket, 1);
@@ -171,7 +176,7 @@ function loadList(res, body) {
   }
   if (!counts.size) return json(res, 400, { error: 'La lista está vacía' });
   if (counts.size > 500) return json(res, 400, { error: 'Demasiados participantes (máximo 500)' });
-  state = freshState([...counts].map(([name, cupos]) => ({ name, cupos })));
+  state = freshState([...counts].map(([name, cupos]) => ({ name, cupos })), state.attempts);
   saveState();
   broadcastState();
   json(res, 200, { ok: true, participants: counts.size, cupos: state.base.reduce((sum, p) => sum + p.cupos, 0) });
@@ -212,8 +217,13 @@ async function handleApi(req, res, url) {
   if (url === '/api/participant') return setParticipant(res, body);
   if (url === '/api/prize') {
     state.prize = String(body.prize || '').trim().slice(0, 80);
+  } else if (url === '/api/attempts') {
+    const attempts = Number(body.attempts);
+    if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) return json(res, 400, { error: 'Intentos inválidos (1 a 10)' });
+    state.attempts = attempts;
+    state.attempt = 0;
   } else if (url === '/api/reset') {
-    state = freshState(state.base);
+    state = freshState(state.base, state.attempts);
   } else {
     return json(res, 404, { error: 'No encontrado' });
   }

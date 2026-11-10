@@ -3,11 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0a0a0a">
   <title>Club Sørtis | Sorteo en vivo</title>
   <link rel="icon" href="/logo.png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <canvas id="confetti" hidden></canvas>
+
   <header>
     <img class="logo" src="/logo.png" alt="Club Sørtis">
     <div class="brand">
@@ -18,36 +21,72 @@
       <span id="status" class="badge off">CONECTANDO</span>
       <span id="viewers" class="viewers"></span>
     </div>
+    <button id="soundBtn" class="icon-btn" title="Activar o silenciar el sonido" aria-pressed="false">Sonido: no</button>
   </header>
 
   <main>
     <section class="stage">
       <p id="prize" class="prize"></p>
+      <p id="round" class="round"></p>
       <p id="current" class="current"></p>
       <div class="wheel-wrap">
-        <div class="pointer"></div>
+        <div id="pointer" class="pointer"></div>
         <canvas id="wheel" width="1000" height="1000"></canvas>
         <img class="hub" src="/logo.png" alt="">
       </div>
-      <p id="summary" class="summary"></p>
+
+      <div class="stats">
+        <div class="stat"><b id="statPeople">0</b><span>participantes</span></div>
+        <div class="stat"><b id="statCupos">0</b><span>cupos en juego</span></div>
+        <div class="stat"><b id="statSpins">0</b><span>giros</span></div>
+        <div class="stat"><b id="statWinners">0</b><span>ganadores</span></div>
+      </div>
 
       <div id="admin" class="panel admin" hidden>
         <h2>Panel de administrador</h2>
         <button id="spinBtn" class="gold big">GIRAR RULETA</button>
-        <form id="prizeForm" class="row">
-          <input id="prizeInput" maxlength="80" placeholder="Premio de este giro (opcional)">
-          <button class="outline">Guardar</button>
+
+        <div class="field">
+          <label for="attemptsSel">Modo de sorteo</label>
+          <select id="attemptsSel">
+            <option value="1">A la primera: cada giro tiene ganador</option>
+            <option value="2">A la 2.ª: gana el 2.º giro</option>
+            <option value="3">A la 3.ª: gana el 3.er giro</option>
+            <option value="4">A la 4.ª: gana el 4.º giro</option>
+            <option value="5">A la 5.ª: gana el 5.º giro</option>
+            <option value="6">A la 6.ª: gana el 6.º giro</option>
+            <option value="7">A la 7.ª: gana el 7.º giro</option>
+            <option value="8">A la 8.ª: gana el 8.º giro</option>
+            <option value="9">A la 9.ª: gana el 9.º giro</option>
+            <option value="10">A la 10.ª: gana el 10.º giro</option>
+          </select>
+        </div>
+
+        <form id="prizeForm" class="field">
+          <label for="prizeInput">Premio</label>
+          <div class="row">
+            <input id="prizeInput" maxlength="80" placeholder="Premio de este sorteo (opcional)">
+            <button class="outline">Guardar</button>
+          </div>
         </form>
-        <form id="listForm">
-          <textarea id="listText" rows="7" placeholder="Pega aquí la lista de participantes, un nombre por línea. Cada vez que se repite un nombre es un cupo más.&#10;&#10;1. JUAN PÉREZ&#10;2. JUAN PÉREZ&#10;1. ANA LÓPEZ" required></textarea>
+
+        <form id="listForm" class="field">
+          <label for="listText">Lista de participantes</label>
+          <textarea id="listText" rows="7" placeholder="Pega aquí la lista, un nombre por línea. Cada vez que se repite un nombre es un cupo más.&#10;&#10;1. JUAN PÉREZ&#10;2. JUAN PÉREZ&#10;1. ANA LÓPEZ" required></textarea>
+          <p id="listPreview" class="hint"></p>
           <button class="outline">Cargar lista (nuevo sorteo)</button>
         </form>
-        <form id="partForm" class="row">
-          <input id="partName" maxlength="60" placeholder="Nombre del participante" required>
-          <input id="partCupos" type="number" min="0" max="10000" placeholder="Cupos" required>
-          <button class="outline">Guardar</button>
+
+        <form id="partForm" class="field">
+          <label for="partName">Editar un participante</label>
+          <div class="row">
+            <input id="partName" maxlength="60" placeholder="Nombre" required>
+            <input id="partCupos" type="number" min="0" max="10000" placeholder="Cupos" required>
+            <button class="outline">Guardar</button>
+          </div>
+          <p class="hint">Toca un participante de la lista para editar sus cupos. Con 0 cupos queda fuera.</p>
         </form>
-        <p class="hint">Toca un participante de la lista para editar sus cupos. Con 0 cupos queda fuera.</p>
+
         <div class="row">
           <button id="resetBtn" class="danger">Reiniciar sorteo</button>
           <button id="logoutBtn" class="outline">Cerrar sesión</button>
@@ -58,25 +97,26 @@
 
     <aside>
       <div class="panel">
-        <h2>Ganadores</h2>
+        <h2>Resultados</h2>
         <ol id="history" class="list"></ol>
       </div>
       <div class="panel">
         <h2>Participantes</h2>
+        <input id="search" class="search" type="search" placeholder="Buscar un nombre...">
         <ul id="participants" class="list"></ul>
       </div>
     </aside>
   </main>
 
   <footer>
-    <span>El ganador lo elige el servidor al azar. Cada cupo tiene la misma probabilidad.</span>
+    <span>El resultado lo elige el servidor al azar. Cada cupo tiene la misma probabilidad.</span>
     <button id="adminLink" class="link">Admin</button>
   </footer>
 
   <div id="overlay" class="overlay" hidden>
-    <div class="winner-card">
-      <span class="crown">♛</span>
-      <p class="label">GANADOR</p>
+    <div id="card" class="winner-card">
+      <span id="cardIcon" class="crown">♛</span>
+      <p id="cardLabel" class="label">GANADOR</p>
       <p id="winnerName" class="winner-name"></p>
       <p id="winnerInfo" class="winner-info"></p>
     </div>
