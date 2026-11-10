@@ -8,7 +8,7 @@ const SPIN_MS = 10000;
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_CLIENTS = 3000;
 const MAX_LOGIN_FAILS = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_WINDOW_MS = 60 * 1000;
 const DATA_DIR = path.join(__dirname, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -111,7 +111,7 @@ function login(req, res, body) {
   const ip = clientIp(req);
   const now = Date.now();
   const fails = (loginFails.get(ip) || []).filter((t) => now - t < LOGIN_WINDOW_MS);
-  if (fails.length >= MAX_LOGIN_FAILS) return json(res, 429, { error: 'Demasiados intentos. Espera 15 minutos.' });
+  if (fails.length >= MAX_LOGIN_FAILS) return json(res, 429, { error: 'Demasiados intentos. Espera 60 segundos.' });
   if (!crypto.timingSafeEqual(sha(body.password), sha(ADMIN_PASSWORD))) {
     fails.push(now);
     loginFails.set(ip, fails);
