@@ -8,7 +8,10 @@ const storage = require('./storage');
 const PORT = process.env.PORT || 3000;
 const SPIN_MS = 8000;
 const DRAW_AT = process.env.DRAW_AT || '2026-11-10T20:00:00-04:00';
-const FRONTEND_ORIGIN = String(process.env.FRONTEND_ORIGIN || '').replace(/\/$/, '');
+const configuredFrontendOrigin = String(process.env.FRONTEND_ORIGIN || '').replace(/\/$/, '');
+const FRONTEND_ORIGIN = configuredFrontendOrigin === 'https://example.invalid'
+  ? 'https://club-sortis.vercel.app'
+  : configuredFrontendOrigin;
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_CLIENTS = 3000;
 const MAX_LOGIN_FAILS = 5;
