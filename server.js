@@ -39,7 +39,8 @@ function buildSlots(participants) {
   return participants
     .flatMap((p) => {
       const offset = rand();
-      return Array.from({ length: p.cupos }, (_, k) => ({ name: p.name, key: (k + offset) / p.cupos, tie: rand() }));
+      const casillas = Math.ceil(Math.sqrt(p.cupos));
+      return Array.from({ length: casillas }, (_, k) => ({ name: p.name, key: (k + offset) / casillas, tie: rand() }));
     })
     .sort((a, b) => a.key - b.key || a.tie - b.tie)
     .map((s) => s.name);
@@ -155,7 +156,7 @@ function startSpin(res) {
     if (win) state.attempt = 0;
     const p = state.participants.find((x) => x.name === winner.name);
     if (p) p.cupos = Math.max(0, p.cupos - 1);
-    state.slots.splice(ticket, 1);
+    state.slots = buildSlots(state.participants);
     state.history.push(entry);
     state.rest = fraction;
     spin = null;

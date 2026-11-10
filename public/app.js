@@ -242,20 +242,23 @@ function renderParticipants(total) {
   const list = $('#participants');
   const query = $('#search').value.trim().toUpperCase();
   const max = Math.max(1, ...state.participants.map((p) => p.cupos));
+  const casillas = new Map();
+  (state.slots || []).forEach((name) => casillas.set(name, (casillas.get(name) || 0) + 1));
   list.classList.toggle('editable', Boolean(token));
   list.replaceChildren();
   const shown = [...state.participants].sort((a, b) => b.cupos - a.cupos).filter((p) => p.name.includes(query));
   if (!shown.length) list.append(el('li', 'empty', state.participants.length ? 'Sin coincidencias' : 'Aún no hay participantes'));
   shown.forEach((p) => {
     const li = el('li', p.cupos ? '' : 'out');
-    const pct = total ? ((p.cupos / total) * 100).toFixed(2) : '0.00';
+    const own = casillas.get(p.name) || 0;
+    const pct = total ? ((own / total) * 100).toFixed(2) : '0.00';
     const name = el('span');
     const dot = el('span', 'dot');
     dot.style.background = colorOf(p.name)[0];
     name.append(dot, p.name);
     const bar = el('span', 'bar');
     bar.style.width = `${(p.cupos / max) * 100}%`;
-    li.append(name, el('span', 'meta', `${p.cupos} cupos · ${pct}%`), bar);
+    li.append(name, el('span', 'meta', `${p.cupos} cupos · ${own} casillas · ${pct}%`), bar);
     li.addEventListener('click', () => {
       if (!token) return;
       $('#partName').value = p.name;
@@ -274,8 +277,8 @@ function render() {
   $('#prize').textContent = state.prize ? `Premio: ${state.prize}` : '';
   $('#viewers').textContent = state.viewers ? `${state.viewers} viendo ahora` : '';
   countUp($('#statPeople'), active.length);
-  countUp($('#statCupos'), total);
-  countUp($('#statSpins'), state.history.length);
+  countUp($('#statCupos'), active.reduce((sum, p) => sum + p.cupos, 0));
+  countUp($('#statSlots'), total);
   countUp($('#statWinners'), state.history.filter((h) => h.win).length);
   renderRound(total);
   renderHistory();
