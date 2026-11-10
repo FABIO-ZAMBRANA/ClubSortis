@@ -5,9 +5,14 @@
   "description": "Ruleta de sorteos en vivo de Club Sortis",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check:db": "node scripts/check-database.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.10",
+    "pg": "^8.23.1"
   }
 }

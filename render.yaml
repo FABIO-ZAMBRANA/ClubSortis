@@ -9,3 +9,17 @@ services:
     envVars:
       - key: ADMIN_PASSWORD
         sync: false
+      - key: DRAW_AT
+        value: 2026-11-10T20:00:00-04:00
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: PGHOST
+        value: aws-1-us-east-1.pooler.supabase.com
+      - key: PGPORT
+        value: 5432
+      - key: PGDATABASE
+        value: postgres
+      - key: PGUSER
+        value: postgres.jktafqqdvguaheiwfzrl
+      - key: PGPASSWORD
+        sync: false
