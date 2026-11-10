@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Club Sørtis | Sorteo en vivo</title>
+  <link rel="icon" href="/logo.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <img class="logo" src="/logo.png" alt="Club Sørtis">
+    <div class="brand">
+      <span class="club">CLUB</span>
+      <h1>SØRTIS</h1>
+    </div>
+    <div class="live">
+      <span id="status" class="badge off">CONECTANDO</span>
+      <span id="viewers" class="viewers"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage">
+      <p id="prize" class="prize"></p>
+      <div class="wheel-wrap">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="1000" height="1000"></canvas>
+        <img class="hub" src="/logo.png" alt="">
+      </div>
+      <p id="summary" class="summary"></p>
+
+      <div id="admin" class="panel admin" hidden>
+        <h2>Panel de administrador</h2>
+        <button id="spinBtn" class="gold big">GIRAR RULETA</button>
+        <form id="prizeForm" class="row">
+          <input id="prizeInput" maxlength="80" placeholder="Premio de este giro (opcional)">
+          <button class="outline">Guardar</button>
+        </form>
+        <form id="listForm">
+          <textarea id="listText" rows="7" placeholder="Pega aquí la lista de participantes, un nombre por línea. Cada vez que se repite un nombre es un cupo más.&#10;&#10;1. JUAN PÉREZ&#10;2. JUAN PÉREZ&#10;1. ANA LÓPEZ" required></textarea>
+          <button class="outline">Cargar lista (nuevo sorteo)</button>
+        </form>
+        <form id="partForm" class="row">
+          <input id="partName" maxlength="60" placeholder="Nombre del participante" required>
+          <input id="partCupos" type="number" min="0" max="10000" placeholder="Cupos" required>
+          <button class="outline">Guardar</button>
+        </form>
+        <p class="hint">Toca un participante de la lista para editar sus cupos. Con 0 cupos queda fuera.</p>
+        <div class="row">
+          <button id="resetBtn" class="danger">Reiniciar sorteo</button>
+          <button id="logoutBtn" class="outline">Cerrar sesión</button>
+        </div>
+        <p id="adminMsg" class="msg"></p>
+      </div>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <h2>Ganadores</h2>
+        <ol id="history" class="list"></ol>
+      </div>
+      <div class="panel">
+        <h2>Participantes</h2>
+        <ul id="participants" class="list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <span>El ganador lo elige el servidor al azar. Cada cupo tiene la misma probabilidad.</span>
+    <button id="adminLink" class="link">Admin</button>
+  </footer>
+
+  <div id="overlay" class="overlay" hidden>
+    <div class="winner-card">
+      <span class="crown">♛</span>
+      <p class="label">GANADOR</p>
+      <p id="winnerName" class="winner-name"></p>
+      <p id="winnerInfo" class="winner-info"></p>
+    </div>
+  </div>
+
+  <dialog id="loginDialog">
+    <form id="loginForm">
+      <h2>Acceso administrador</h2>
+      <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+      <p id="loginMsg" class="msg"></p>
+      <div class="row">
+        <button type="button" id="loginCancel" class="outline">Cancelar</button>
+        <button class="gold">Entrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

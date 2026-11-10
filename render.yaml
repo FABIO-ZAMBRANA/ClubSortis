@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: club-sortis
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: ADMIN_PASSWORD
+        generateValue: true
