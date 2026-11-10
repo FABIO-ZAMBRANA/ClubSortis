@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
-const SPIN_MS = 10000;
+const SPIN_MS = 8000;
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_CLIENTS = 3000;
 const MAX_LOGIN_FAILS = 5;
@@ -39,7 +39,7 @@ function buildSlots(participants) {
   return participants
     .flatMap((p) => {
       const offset = rand();
-      const casillas = p.cupos > 0 ? 1 : 0;
+      const casillas = p.cupos;
       return Array.from({ length: casillas }, (_, k) => ({ name: p.name, key: (k + offset) / casillas, tie: rand() }));
     })
     .sort((a, b) => a.key - b.key || a.tie - b.tie)
@@ -76,7 +76,7 @@ const publicState = () => ({
   attempts: state.attempts,
   attempt: state.attempt,
   viewers: clients.size,
-  spin: spin && { id: spin.id, elapsed: Date.now() - spin.startedAt, duration: SPIN_MS, from: spin.from, fraction: spin.fraction, wheel: spin.wheel },
+  spin: spin && { id: spin.id, elapsed: Date.now() - spin.startedAt, duration: spin.duration, turns: spin.turns, from: spin.from, fraction: spin.fraction, wheel: spin.wheel },
 });
 
 const emit = (res, event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -147,7 +147,8 @@ function startSpin(res) {
   const ticket = crypto.randomInt(total);
   const winner = { name: wheel[ticket] };
   const fraction = (ticket + 0.1 + 0.8 * (crypto.randomInt(1000) / 1000)) / total;
-  spin = { id: crypto.randomUUID(), startedAt: Date.now(), from: state.rest, fraction, wheel };
+  const duration = SPIN_MS + crypto.randomInt(6000);
+  spin = { id: crypto.randomUUID(), startedAt: Date.now(), duration, turns: 6 + crypto.randomInt(6), from: state.rest, fraction, wheel };
   broadcastState();
   setTimeout(() => {
     state.attempt += 1;
@@ -156,14 +157,14 @@ function startSpin(res) {
     if (win) state.attempt = 0;
     const p = state.participants.find((x) => x.name === winner.name);
     if (p) p.cupos = Math.max(0, p.cupos - 1);
-    state.slots = buildSlots(state.participants);
+    state.slots.splice(ticket, 1);
     state.history.push(entry);
     state.rest = fraction;
     spin = null;
     saveState();
     broadcast('result', entry);
     broadcastState();
-  }, SPIN_MS + 700);
+  }, duration + 700);
   json(res, 200, { ok: true });
 }
 

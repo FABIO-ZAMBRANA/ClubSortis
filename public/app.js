@@ -198,7 +198,7 @@ function startSpin(s) {
     t0: performance.now() - s.elapsed,
     duration: s.duration,
     start: TAU * (1 - s.from),
-    end: TAU * (TURNS + 1 - s.fraction),
+    end: TAU * ((s.turns || TURNS) + 1 - s.fraction),
   };
   requestAnimationFrame(frame);
 }
