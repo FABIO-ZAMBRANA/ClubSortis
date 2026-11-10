@@ -258,7 +258,7 @@ function renderParticipants(total) {
     name.append(dot, p.name);
     const bar = el('span', 'bar');
     bar.style.width = `${(p.cupos / max) * 100}%`;
-    li.append(name, el('span', 'meta', `${p.cupos} cupos · ${own} casillas · ${pct}%`), bar);
+    li.append(name, el('span', 'meta', `${p.cupos} cupos · ${pct}%`), bar);
     li.addEventListener('click', () => {
       if (!token) return;
       $('#partName').value = p.name;
@@ -278,7 +278,7 @@ function render() {
   $('#viewers').textContent = state.viewers ? `${state.viewers} viendo ahora` : '';
   countUp($('#statPeople'), active.length);
   countUp($('#statCupos'), active.reduce((sum, p) => sum + p.cupos, 0));
-  countUp($('#statSlots'), total);
+  countUp($('#statSpins'), state.history.length);
   countUp($('#statWinners'), state.history.filter((h) => h.win).length);
   renderRound(total);
   renderHistory();

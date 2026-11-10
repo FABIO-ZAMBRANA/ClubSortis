@@ -39,7 +39,7 @@ function buildSlots(participants) {
   return participants
     .flatMap((p) => {
       const offset = rand();
-      const casillas = Math.ceil(Math.sqrt(p.cupos));
+      const casillas = p.cupos > 0 ? 1 : 0;
       return Array.from({ length: casillas }, (_, k) => ({ name: p.name, key: (k + offset) / casillas, tie: rand() }));
     })
     .sort((a, b) => a.key - b.key || a.tie - b.tie)
