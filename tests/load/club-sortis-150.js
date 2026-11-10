@@ -3,6 +3,8 @@ import { check, sleep } from 'k6';
 
 const FRONTEND_URL = __ENV.FRONTEND_URL || 'https://club-sortis.vercel.app';
 const API_URL = __ENV.API_URL || 'https://clubsortis-1.onrender.com';
+const TARGET_VUS = Number(__ENV.TARGET_VUS || 150);
+const FIRST_RAMP = Math.min(50, TARGET_VUS);
 
 export const options = {
   discardResponseBodies: true,
@@ -12,9 +14,9 @@ export const options = {
       exec: 'viewer',
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 50 },
-        { duration: '30s', target: 150 },
-        { duration: '2m', target: 150 },
+        { duration: '30s', target: FIRST_RAMP },
+        { duration: '30s', target: TARGET_VUS },
+        { duration: '2m', target: TARGET_VUS },
         { duration: '20s', target: 0 },
       ],
       gracefulRampDown: '0s',
