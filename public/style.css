@@ -68,6 +68,16 @@ main {
 
 .stage { text-align: center; }
 .prize { min-height: 1.4em; margin: 0 0 10px; font-size: 1.3rem; color: var(--gold-light); }
+.current {
+  min-height: 1.5em;
+  margin: 0 0 16px;
+  font-family: system-ui, sans-serif;
+  font-size: clamp(1.1rem, 4vw, 1.7rem);
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 12px var(--gold);
+}
+
 .summary { color: var(--muted); font-family: system-ui, sans-serif; font-size: 0.9rem; }
 
 .wheel-wrap {

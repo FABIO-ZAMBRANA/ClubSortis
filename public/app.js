@@ -6,11 +6,18 @@ const COLORS = [
   ['#141414', '#f6e27a'],
   ['#7a0c12', '#f6e27a'],
   ['#0b4d33', '#f6e27a'],
+  ['#f6e27a', '#1a1400'],
+  ['#3a3a3a', '#ffffff'],
+  ['#b3121d', '#ffffff'],
+  ['#12805a', '#ffffff'],
+  ['#8a6a14', '#ffffff'],
+  ['#1b2a5c', '#f6e27a'],
+  ['#4a1259', '#f6e27a'],
 ];
 
 const canvas = $('#wheel');
 const ctx = canvas.getContext('2d');
-let state = { participants: [], history: [], prize: '', rest: 0, spin: null };
+let state = { participants: [], slots: [], history: [], prize: '', rest: 0, spin: null };
 let held = null;
 let anim = null;
 let rotation = 0;
@@ -25,39 +32,40 @@ function el(tag, cls, text) {
 }
 
 function draw() {
-  const all = held || state.participants;
-  const total = all.reduce((sum, p) => sum + p.cupos, 0);
+  const slots = held || state.slots || [];
+  const total = slots.length;
+  const w = TAU / total;
+  const colorOf = new Map(state.participants.map((p, i) => [p.name, COLORS[i % COLORS.length]]));
+  const pointed = total ? slots[Math.floor(((((-rotation % TAU) + TAU) % TAU) / w)) % total] : '';
+  $('#current').textContent = pointed;
   const c = canvas.width / 2;
   const R = c - 4;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.translate(c, c);
   ctx.rotate(rotation - Math.PI / 2);
-  let a = 0;
-  all.forEach((p, i) => {
-    if (!p.cupos) return;
-    const w = (p.cupos / total) * TAU;
-    const [fill, text] = COLORS[i % COLORS.length];
+  slots.forEach((name, i) => {
+    const a = i * w;
+    const [fill, text] = colorOf.get(name) || COLORS[0];
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, R, a, a + w);
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(246, 226, 122, 0.5)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    if (w > 0.045) {
+    if (w > 0.04) {
       ctx.save();
       ctx.rotate(a + w / 2);
       ctx.fillStyle = text;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       ctx.font = `bold ${Math.max(13, Math.min(30, w * R * 0.4))}px system-ui, sans-serif`;
-      ctx.fillText(`${p.name} (${p.cupos})`, R - 16, 0, R * 0.68);
+      ctx.fillText(name, R - 16, 0, R * 0.68);
       ctx.restore();
     }
-    a += w;
   });
   ctx.restore();
   if (!total) {

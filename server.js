@@ -32,13 +32,25 @@ if (!ADMIN_PASSWORD) {
 }
 
 const copyList = (list) => list.map((p) => ({ ...p }));
-const freshState = (base = []) => ({ participants: copyList(base), base, history: [], prize: '', rest: 0 });
+const freshState = (base = []) => ({ participants: copyList(base), base, slots: buildSlots(base), history: [], prize: '', rest: 0 });
+
+function buildSlots(participants) {
+  const rand = () => crypto.randomInt(1e9) / 1e9;
+  return participants
+    .flatMap((p) => {
+      const offset = rand();
+      return Array.from({ length: p.cupos }, (_, k) => ({ name: p.name, key: (k + offset) / p.cupos, tie: rand() }));
+    })
+    .sort((a, b) => a.key - b.key || a.tie - b.tie)
+    .map((s) => s.name);
+}
+
 const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').trim().replace(/\s+/g, ' ').toUpperCase();
 
 function loadState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base)) return s;
+    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return s;
   } catch {}
   return freshState();
 }
@@ -56,6 +68,7 @@ function saveState() {
 
 const publicState = () => ({
   participants: state.participants,
+  slots: state.slots,
   history: state.history,
   prize: state.prize,
   rest: state.rest,
@@ -125,12 +138,11 @@ function login(req, res, body) {
 
 function startSpin(res) {
   if (spin) return json(res, 409, { error: 'La ruleta ya está girando' });
-  const wheel = state.participants.filter((p) => p.cupos > 0).map((p) => ({ ...p }));
-  const total = wheel.reduce((sum, p) => sum + p.cupos, 0);
+  const wheel = [...state.slots];
+  const total = wheel.length;
   if (!total) return json(res, 400, { error: 'No quedan cupos para sortear' });
   const ticket = crypto.randomInt(total);
-  let acc = 0;
-  const winner = wheel.find((p) => (acc += p.cupos) > ticket);
+  const winner = { name: wheel[ticket] };
   const fraction = (ticket + 0.1 + 0.8 * (crypto.randomInt(1000) / 1000)) / total;
   spin = { id: crypto.randomUUID(), startedAt: Date.now(), from: state.rest, fraction, wheel };
   broadcastState();
@@ -138,6 +150,7 @@ function startSpin(res) {
     const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, total, prize: state.prize, at: new Date().toISOString() };
     const p = state.participants.find((x) => x.name === winner.name);
     if (p) p.cupos = Math.max(0, p.cupos - 1);
+    state.slots.splice(ticket, 1);
     state.history.push(entry);
     state.rest = fraction;
     spin = null;
@@ -177,6 +190,7 @@ function setParticipant(res, body) {
   }
   state.base = state.base.filter((p) => p.cupos > 0);
   state.participants = state.participants.filter((p) => p.cupos > 0 || state.history.some((h) => h.name === p.name));
+  state.slots = buildSlots(state.participants);
   saveState();
   broadcastState();
   json(res, 200, { ok: true });
