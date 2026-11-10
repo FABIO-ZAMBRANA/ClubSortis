@@ -2,6 +2,7 @@ services:
   - type: web
     name: club-sortis
     runtime: node
+    region: virginia
     plan: free
     buildCommand: npm install
     startCommand: node server.js
