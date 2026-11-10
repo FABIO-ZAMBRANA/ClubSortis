@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check:db": "node scripts/check-database.js"
+    "check:db": "node scripts/check-database.js",
+    "load:test": "k6 run --summary-export=tests/load/last-result.json tests/load/club-sortis-150.js"
   },
   "engines": {
     "node": ">=18"
