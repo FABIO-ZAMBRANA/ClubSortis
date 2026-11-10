@@ -1,4 +1,5 @@
 const $ = (s) => document.querySelector(s);
+const API_BASE = String(window.CLUB_SORTIS_API_URL || window.location.origin).replace(/\/$/, '');
 const TAU = Math.PI * 2;
 const TURNS = 8;
 const WHEEL_R = 460;
@@ -437,7 +438,7 @@ function hideOverlay(release = true) {
 }
 
 function connect() {
-  const es = new EventSource('/events');
+  const es = new EventSource(`${API_BASE}/events`);
   const status = $('#status');
   es.onopen = () => {
     connected = true;
@@ -471,7 +472,7 @@ function connect() {
 }
 
 async function api(path, body = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),

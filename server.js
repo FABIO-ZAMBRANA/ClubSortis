@@ -1,11 +1,14 @@
+require('dotenv').config({ quiet: true });
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const storage = require('./storage');
 
 const PORT = process.env.PORT || 3000;
 const SPIN_MS = 8000;
 const DRAW_AT = process.env.DRAW_AT || '2026-11-10T20:00:00-04:00';
+const FRONTEND_ORIGIN = String(process.env.FRONTEND_ORIGIN || '').replace(/\/$/, '');
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_CLIENTS = 3000;
 const MAX_LOGIN_FAILS = 5;
@@ -16,6 +19,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/config.js': ['config.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/logo.png': ['logo.png', 'image/png'],
   '/gran-sorteo.png': ['gran-sorteo.png', 'image/png'],
@@ -25,6 +29,12 @@ const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'no-referrer',
+  ...(FRONTEND_ORIGIN ? {
+    'Access-Control-Allow-Origin': FRONTEND_ORIGIN,
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+    Vary: 'Origin',
+  } : {}),
 };
 
 let ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
@@ -58,7 +68,7 @@ function shuffleSlots() {
 
 const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').trim().replace(/\s+/g, ' ').toUpperCase();
 
-function loadState() {
+function loadLocalState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, finished: false, finishedAt: null, nums: s.slots.map((_, i) => i + 1), ...s };
@@ -66,15 +76,47 @@ function loadState() {
   return freshState();
 }
 
-let state = loadState();
+let state = loadLocalState();
 let spin = null;
+let storageReady = false;
+let saveQueue = Promise.resolve();
 const clients = new Set();
 const tokens = new Map();
 const loginFails = new Map();
 
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function validState(value) {
+  return value && Array.isArray(value.participants) && Array.isArray(value.history) && Array.isArray(value.base) && Array.isArray(value.slots) && Array.isArray(value.nums);
+}
+
+async function saveLocalState(snapshot) {
+  await fs.promises.mkdir(DATA_DIR, { recursive: true });
+  const temporary = `${STATE_FILE}.tmp`;
+  await fs.promises.writeFile(temporary, JSON.stringify(snapshot));
+  await fs.promises.rename(temporary, STATE_FILE);
+}
+
 function saveState() {
-  fs.mkdir(DATA_DIR, { recursive: true }, () =>
-    fs.writeFile(STATE_FILE, JSON.stringify(state), (err) => err && console.error('No se pudo guardar el estado:', err.message)));
+  const stateSnapshot = clone(state);
+  const spinSnapshot = spin ? clone(spin) : null;
+  saveQueue = saveQueue
+    .catch(() => {})
+    .then(() => (storage.configured ? storage.save(stateSnapshot, spinSnapshot) : saveLocalState(stateSnapshot)));
+  return saveQueue;
+}
+
+async function initializeStorage() {
+  if (storage.configured) {
+    const stored = await storage.load(state);
+    if (!validState(stored.state)) throw new Error('El estado guardado en Supabase no es válido');
+    state = { attempts: 1, attempt: 0, finished: false, finishedAt: null, ...stored.state };
+    spin = stored.pendingSpin || null;
+    console.log('Estado cargado desde Supabase.');
+  } else {
+    console.log('Supabase no configurado; se usará data/state.json.');
+  }
+  storageReady = true;
 }
 
 const publicState = () => ({
@@ -154,7 +196,55 @@ function login(req, res, body) {
   json(res, 200, { token });
 }
 
-function startSpin(res) {
+function scheduleSpinCompletion() {
+  if (!spin) return;
+  const remaining = Math.max(0, spin.startedAt + spin.duration + 700 - Date.now());
+  const id = spin.id;
+  setTimeout(() => finalizeSpin(id).catch((error) => {
+    console.error('No se pudo finalizar el giro:', error.code || error.message);
+    setTimeout(scheduleSpinCompletion, 3000);
+  }), remaining);
+}
+
+async function finalizeSpin(id) {
+  if (!spin || spin.id !== id) return;
+  const completedSpin = spin;
+  const previousState = clone(state);
+  state.attempt += 1;
+  const win = state.attempt >= state.attempts;
+  const entry = {
+    n: state.history.length + 1,
+    name: completedSpin.winnerName,
+    ticket: completedSpin.ticket + 1,
+    num: completedSpin.winningNum,
+    total: completedSpin.total,
+    prize: state.prize,
+    win,
+    attempt: state.attempt,
+    attempts: state.attempts,
+    at: new Date().toISOString(),
+  };
+  if (win) state.attempt = 0;
+  const participant = state.participants.find((item) => item.name === completedSpin.winnerName);
+  if (participant) participant.cupos = Math.max(0, participant.cupos - 1);
+  state.slots.splice(completedSpin.ticket, 1);
+  state.nums.splice(completedSpin.ticket, 1);
+  state.history.push(entry);
+  if (win) state.prize = '';
+  state.rest = completedSpin.fraction;
+  spin = null;
+  try {
+    await saveState();
+  } catch (error) {
+    state = previousState;
+    spin = completedSpin;
+    throw error;
+  }
+  broadcast('result', entry);
+  broadcastState();
+}
+
+async function startSpin(res) {
   if (spin) return json(res, 409, { error: 'La ruleta ya está girando' });
   if (state.finished) return json(res, 409, { error: 'El sorteo ya fue finalizado' });
   if (!String(state.prize || '').trim()) return json(res, 400, { error: 'Debes ingresar el nombre del premio antes de girar' });
@@ -162,32 +252,34 @@ function startSpin(res) {
   const total = wheel.length;
   if (!total) return json(res, 400, { error: 'No quedan cupos para sortear' });
   const ticket = crypto.randomInt(total);
-  const winner = { name: wheel[ticket] };
   const fraction = (ticket + 0.1 + 0.8 * (crypto.randomInt(1000) / 1000)) / total;
   const duration = SPIN_MS + crypto.randomInt(6000);
-  spin = { id: crypto.randomUUID(), startedAt: Date.now(), duration, turns: 6 + crypto.randomInt(6), from: state.rest, fraction, wheel };
-  broadcastState();
-  setTimeout(() => {
-    state.attempt += 1;
-    const win = state.attempt >= state.attempts;
-    const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, num: state.nums[ticket], total, prize: state.prize, win, attempt: state.attempt, attempts: state.attempts, at: new Date().toISOString() };
-    if (win) state.attempt = 0;
-    const p = state.participants.find((x) => x.name === winner.name);
-    if (p) p.cupos = Math.max(0, p.cupos - 1);
-    state.slots.splice(ticket, 1);
-    state.nums.splice(ticket, 1);
-    state.history.push(entry);
-    if (win) state.prize = '';
-    state.rest = fraction;
+  spin = {
+    id: crypto.randomUUID(),
+    startedAt: Date.now(),
+    duration,
+    turns: 6 + crypto.randomInt(6),
+    from: state.rest,
+    fraction,
+    wheel,
+    ticket,
+    winnerName: wheel[ticket],
+    winningNum: state.nums[ticket],
+    total,
+  };
+  try {
+    await saveState();
+  } catch (error) {
     spin = null;
-    saveState();
-    broadcast('result', entry);
-    broadcastState();
-  }, duration + 700);
+    console.error('No se pudo guardar el giro:', error.code || error.message);
+    return json(res, 503, { error: 'No se pudo guardar el giro. Intenta nuevamente.' });
+  }
+  broadcastState();
+  scheduleSpinCompletion();
   json(res, 200, { ok: true });
 }
 
-function loadList(res, body) {
+async function loadList(res, body) {
   const counts = new Map();
   for (const line of String(body.text || '').split(/\r?\n/)) {
     const name = cleanName(line);
@@ -197,18 +289,25 @@ function loadList(res, body) {
   }
   if (!counts.size) return json(res, 400, { error: 'La lista está vacía' });
   if (counts.size > 500) return json(res, 400, { error: 'Demasiados participantes (máximo 500)' });
+  const previousState = state;
   state = freshState([...counts].map(([name, cupos]) => ({ name, cupos })), state.attempts);
-  saveState();
+  try {
+    await saveState();
+  } catch (error) {
+    state = previousState;
+    throw error;
+  }
   broadcastState();
   json(res, 200, { ok: true, participants: counts.size, cupos: state.base.reduce((sum, p) => sum + p.cupos, 0) });
 }
 
-function setParticipant(res, body) {
+async function setParticipant(res, body) {
   const name = cleanName(body.name);
   const cupos = Number(body.cupos);
   if (!name || name.length > 60) return json(res, 400, { error: 'Nombre inválido' });
   if (!Number.isInteger(cupos) || cupos < 0 || cupos > 10000) return json(res, 400, { error: 'Cupos inválidos' });
   if (!state.participants.some((p) => p.name === name) && state.participants.length >= 500) return json(res, 400, { error: 'Demasiados participantes' });
+  const previousState = clone(state);
   for (const list of [state.participants, state.base]) {
     const existing = list.find((p) => p.name === name);
     if (existing) existing.cupos = cupos;
@@ -217,7 +316,12 @@ function setParticipant(res, body) {
   state.base = state.base.filter((p) => p.cupos > 0);
   state.participants = state.participants.filter((p) => p.cupos > 0 || state.history.some((h) => h.name === p.name));
   Object.assign(state, layout(buildSlots(state.participants)));
-  saveState();
+  try {
+    await saveState();
+  } catch (error) {
+    state = previousState;
+    throw error;
+  }
   broadcastState();
   json(res, 200, { ok: true });
 }
@@ -236,6 +340,7 @@ async function handleApi(req, res, url) {
   if (spin) return json(res, 409, { error: 'Espera a que termine el giro' });
   if (url === '/api/list') return loadList(res, body);
   if (url === '/api/participant') return setParticipant(res, body);
+  const previousState = clone(state);
   if (url === '/api/prize') {
     state.prize = String(body.prize || '').trim().slice(0, 80);
   } else if (url === '/api/shuffle') {
@@ -256,7 +361,12 @@ async function handleApi(req, res, url) {
   } else {
     return json(res, 404, { error: 'No encontrado' });
   }
-  saveState();
+  try {
+    await saveState();
+  } catch (error) {
+    state = previousState;
+    throw error;
+  }
   broadcastState();
   json(res, 200, { ok: true });
 }
@@ -280,13 +390,23 @@ function handleEvents(req, res) {
   });
 }
 
-http
-  .createServer((req, res) => {
+const server = http.createServer((req, res) => {
     const url = req.url.split('?')[0];
-    if (req.method === 'POST' && url.startsWith('/api/')) return handleApi(req, res, url);
+    if (req.method === 'OPTIONS' && url.startsWith('/api/')) {
+      res.writeHead(204, SECURITY_HEADERS);
+      return res.end();
+    }
+    if (req.method === 'POST' && url.startsWith('/api/')) {
+      handleApi(req, res, url).catch((error) => {
+        console.error('Error de API:', error.code || error.message);
+        if (!res.headersSent) json(res, 500, { error: 'No se pudo guardar el estado del sorteo' });
+        else res.end();
+      });
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Método no permitido' });
     if (url === '/events') return handleEvents(req, res);
-    if (url === '/healthz') return json(res, 200, { ok: true });
+    if (url === '/healthz') return json(res, storageReady ? 200 : 503, { ok: storageReady, database: storage.configured ? 'supabase' : 'local' });
     const file = STATIC[url];
     if (!file) return json(res, 404, { error: 'No encontrado' });
     fs.readFile(path.join(PUBLIC_DIR, file[0]), (err, data) => {
@@ -294,7 +414,22 @@ http
       res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': file[1], 'Cache-Control': 'no-cache' });
       res.end(req.method === 'HEAD' ? undefined : data);
     });
-  })
-  .listen(PORT, () => console.log(`Club Sortis en http://localhost:${PORT}`));
+  });
+
+async function startServer() {
+  await initializeStorage();
+  if (spin) {
+    const recoverable = Number.isInteger(spin.ticket) && spin.winnerName && Number.isFinite(spin.startedAt) && Number.isFinite(spin.duration);
+    if (!recoverable) throw new Error('Supabase contiene un giro pendiente incompatible');
+    console.log('Giro pendiente recuperado desde Supabase.');
+    scheduleSpinCompletion();
+  }
+  server.listen(PORT, '0.0.0.0', () => console.log(`Club Sortis en http://localhost:${PORT}`));
+}
+
+startServer().catch((error) => {
+  console.error('No se pudo iniciar Club Sortis:', error.code || error.message);
+  process.exitCode = 1;
+});
 
 setInterval(() => clients.forEach((res) => res.write(': ping\n\n')), 25000);
