@@ -5,6 +5,7 @@ const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const SPIN_MS = 8000;
+const DRAW_AT = process.env.DRAW_AT || '2026-11-10T20:00:00-04:00';
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_CLIENTS = 3000;
 const MAX_LOGIN_FAILS = 5;
@@ -17,6 +18,7 @@ const STATIC = {
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/logo.png': ['logo.png', 'image/png'],
+  '/gran-sorteo.png': ['gran-sorteo.png', 'image/png'],
 };
 const SECURITY_HEADERS = {
   'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
@@ -33,7 +35,7 @@ if (!ADMIN_PASSWORD) {
 
 const copyList = (list) => list.map((p) => ({ ...p }));
 const layout = (list) => ({ slots: list.map((s) => s.name), nums: list.map((s) => s.n) });
-const freshState = (base = [], attempts = 1) => ({ participants: copyList(base), base, ...layout(buildSlots(base)), history: [], prize: '', rest: 0, attempts, attempt: 0 });
+const freshState = (base = [], attempts = 1) => ({ participants: copyList(base), base, ...layout(buildSlots(base)), history: [], prize: '', rest: 0, attempts, attempt: 0, finished: false, finishedAt: null });
 
 function buildSlots(participants) {
   const rand = () => crypto.randomInt(1e9) / 1e9;
@@ -59,7 +61,7 @@ const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').tr
 function loadState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, nums: s.slots.map((_, i) => i + 1), ...s };
+    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, finished: false, finishedAt: null, nums: s.slots.map((_, i) => i + 1), ...s };
   } catch {}
   return freshState();
 }
@@ -84,6 +86,10 @@ const publicState = () => ({
   rest: state.rest,
   attempts: state.attempts,
   attempt: state.attempt,
+  finished: state.finished,
+  finishedAt: state.finishedAt,
+  drawAt: DRAW_AT,
+  serverNow: new Date().toISOString(),
   viewers: clients.size,
   spin: spin && { id: spin.id, elapsed: Date.now() - spin.startedAt, duration: spin.duration, turns: spin.turns, from: spin.from, fraction: spin.fraction, wheel: spin.wheel },
 });
@@ -150,6 +156,8 @@ function login(req, res, body) {
 
 function startSpin(res) {
   if (spin) return json(res, 409, { error: 'La ruleta ya está girando' });
+  if (state.finished) return json(res, 409, { error: 'El sorteo ya fue finalizado' });
+  if (!String(state.prize || '').trim()) return json(res, 400, { error: 'Debes ingresar el nombre del premio antes de girar' });
   const wheel = [...state.slots];
   const total = wheel.length;
   if (!total) return json(res, 400, { error: 'No quedan cupos para sortear' });
@@ -169,6 +177,7 @@ function startSpin(res) {
     state.slots.splice(ticket, 1);
     state.nums.splice(ticket, 1);
     state.history.push(entry);
+    if (win) state.prize = '';
     state.rest = fraction;
     spin = null;
     saveState();
@@ -238,6 +247,12 @@ async function handleApi(req, res, url) {
     state.attempt = 0;
   } else if (url === '/api/reset') {
     state = freshState(state.base, state.attempts);
+  } else if (url === '/api/clear') {
+    state = freshState([], state.attempts);
+  } else if (url === '/api/finish') {
+    if (!state.history.some((entry) => entry.win)) return json(res, 400, { error: 'Todavía no hay ganadores para mostrar' });
+    state.finished = true;
+    state.finishedAt = new Date().toISOString();
   } else {
     return json(res, 404, { error: 'No encontrado' });
   }

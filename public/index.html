@@ -24,7 +24,32 @@
     <button id="soundBtn" class="icon-btn" title="Activar o silenciar el sonido" aria-pressed="false">Sonido: no</button>
   </header>
 
-  <main>
+  <section id="countdownView" class="event-view countdown-view" hidden>
+    <div class="event-copy">
+      <span class="eyebrow">CLUB SØRTIS PRESENTA</span>
+      <h2>El gran sorteo comienza pronto</h2>
+      <p id="eventDate" class="event-date"></p>
+      <div class="countdown" aria-label="Cuenta regresiva para el sorteo">
+        <div><b id="countDays">00</b><span>Días</span></div>
+        <div><b id="countHours">00</b><span>Horas</span></div>
+        <div><b id="countMinutes">00</b><span>Minutos</span></div>
+        <div><b id="countSeconds">00</b><span>Segundos</span></div>
+      </div>
+      <p class="waiting-note">Mantén esta página abierta. La ruleta aparecerá automáticamente al llegar la hora.</p>
+    </div>
+    <img class="event-poster" src="/gran-sorteo.png" alt="Premios del Gran Sorteo Club Sørtis">
+  </section>
+
+  <section id="finalView" class="event-view final-view" hidden>
+    <div class="final-heading">
+      <span class="eyebrow">SORTEO FINALIZADO</span>
+      <h2>Ganadores del Gran Sorteo</h2>
+      <p>Felicitaciones a nuestros ganadores</p>
+    </div>
+    <div id="finalWinners" class="final-winners"></div>
+  </section>
+
+  <main id="liveView">
     <section class="stage">
       <p id="prize" class="prize"></p>
       <p id="round" class="round"></p>
@@ -45,6 +70,7 @@
       <div id="admin" class="panel admin" hidden>
         <h2>Panel de administrador</h2>
         <button id="spinBtn" class="gold big">GIRAR RULETA</button>
+        <p id="testModeNote" class="hint test-note" hidden>Modo de prueba: puedes girar ahora; los clientes seguirán viendo el contador hasta las 20:00. Al terminar, pulsa “Reiniciar sorteo” para borrar las pruebas.</p>
         <button id="shuffleBtn" class="outline wide">Mezclar casillas</button>
 
         <div class="field">
@@ -64,9 +90,9 @@
         </div>
 
         <form id="prizeForm" class="field">
-          <label for="prizeInput">Premio</label>
+          <label for="prizeInput">Premio obligatorio</label>
           <div class="row">
-            <input id="prizeInput" maxlength="80" placeholder="Premio de este sorteo (opcional)">
+            <input id="prizeInput" maxlength="80" placeholder="Nombre del premio" required>
             <button class="outline">Guardar</button>
           </div>
         </form>
@@ -90,6 +116,8 @@
 
         <div class="row">
           <button id="resetBtn" class="danger">Reiniciar sorteo</button>
+          <button id="clearBtn" class="danger">Nuevo sorteo / Limpiar</button>
+          <button id="finishBtn" class="gold">Finalizar sorteo</button>
           <button id="logoutBtn" class="outline">Cerrar sesión</button>
         </div>
         <p id="adminMsg" class="msg"></p>
@@ -137,6 +165,16 @@
         <button class="gold">Entrar</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="actionDialog" class="action-dialog">
+    <div class="modal-icon" aria-hidden="true">♦</div>
+    <h2 id="actionTitle">Confirmación</h2>
+    <p id="actionMessage" class="modal-message"></p>
+    <div class="row modal-actions">
+      <button type="button" id="actionCancel" class="outline">Cancelar</button>
+      <button type="button" id="actionConfirm" class="gold">Aceptar</button>
+    </div>
   </dialog>
 
   <script src="/app.js"></script>

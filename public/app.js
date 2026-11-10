@@ -3,6 +3,7 @@ const TAU = Math.PI * 2;
 const TURNS = 8;
 const WHEEL_R = 460;
 const BULBS = 24;
+const DEFAULT_DRAW_AT = '2026-11-10T20:00:00-04:00';
 const COLORS = [
   ['#d4af37', '#1a1400'],
   ['#141414', '#f6e27a'],
@@ -19,7 +20,7 @@ const COLORS = [
 
 const canvas = $('#wheel');
 const ctx = canvas.getContext('2d');
-let state = { participants: [], slots: [], history: [], prize: '', rest: 0, attempts: 1, attempt: 0, spin: null };
+let state = { participants: [], slots: [], history: [], prize: '', rest: 0, attempts: 1, attempt: 0, spin: null, finished: false, drawAt: DEFAULT_DRAW_AT };
 let held = null;
 let highlight = null;
 let anim = null;
@@ -31,6 +32,8 @@ let idlePhase = 0;
 let overlayTimer = null;
 let audio = null;
 let token = sessionStorage.getItem('token');
+let serverOffset = 0;
+let connected = false;
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -285,6 +288,52 @@ function renderOrder() {
   });
 }
 
+function renderFinalWinners() {
+  const list = $('#finalWinners');
+  const winners = state.history.filter((entry) => entry.win);
+  list.replaceChildren();
+  if (!winners.length) {
+    list.append(el('p', 'final-empty', 'Aún no hay ganadores registrados.'));
+    return;
+  }
+  winners.forEach((winner, index) => {
+    const card = el('article', 'final-winner');
+    card.append(
+      el('span', 'final-place', `GANADOR ${index + 1}`),
+      el('strong', 'final-name', winner.name),
+      el('span', 'final-prize', winner.prize || 'Premio no especificado'),
+    );
+    list.append(card);
+  });
+}
+
+function updatePresentation() {
+  const drawAt = Date.parse(state.drawAt || DEFAULT_DRAW_AT);
+  const now = Date.now() + serverOffset;
+  const publicWaiting = now < drawAt && !token && !state.finished;
+  const publicFinished = Boolean(state.finished) && !token;
+  $('#countdownView').hidden = !publicWaiting;
+  $('#finalView').hidden = !publicFinished;
+  $('#liveView').hidden = publicWaiting || publicFinished;
+
+  if (publicWaiting) {
+    const totalSeconds = Math.floor(Math.max(0, drawAt - now) / 1000);
+    $('#countDays').textContent = String(Math.floor(totalSeconds / 86400)).padStart(2, '0');
+    $('#countHours').textContent = String(Math.floor((totalSeconds % 86400) / 3600)).padStart(2, '0');
+    $('#countMinutes').textContent = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    $('#countSeconds').textContent = String(totalSeconds % 60).padStart(2, '0');
+    const formatted = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/La_Paz' }).format(new Date(drawAt));
+    $('#eventDate').textContent = `${formatted} · hora de Bolivia`;
+  }
+
+  if (publicFinished) renderFinalWinners();
+  if (connected) {
+    const status = $('#status');
+    status.textContent = publicWaiting ? 'PRÓXIMAMENTE' : publicFinished ? 'FINALIZADO' : 'EN VIVO';
+    status.className = `badge ${publicWaiting || publicFinished ? 'off' : 'on'}`;
+  }
+}
+
 function render() {
   const active = state.participants.filter((p) => p.cupos > 0);
   const total = (state.slots || []).length;
@@ -300,11 +349,17 @@ function render() {
   renderHistory();
   renderParticipants(total);
   renderOrder();
+  renderFinalWinners();
+  updatePresentation();
 
   $('#shuffleBtn').disabled = spinning || total < 2;
-  $('#spinBtn').disabled = spinning || !total;
+  $('#spinBtn').disabled = spinning || !total || state.finished;
+  $('#testModeNote').hidden = Date.now() + serverOffset >= Date.parse(state.drawAt || DEFAULT_DRAW_AT);
+  $('#finishBtn').disabled = spinning || state.finished || !state.history.some((entry) => entry.win);
+  $('#finishBtn').textContent = state.finished ? 'Sorteo finalizado' : 'Finalizar sorteo';
   $('#spinBtn').textContent = spinning ? 'GIRANDO...' : state.attempts > 1 ? `GIRAR · INTENTO ${state.attempt + 1}/${state.attempts}` : 'GIRAR RULETA';
   if (document.activeElement !== $('#attemptsSel')) $('#attemptsSel').value = state.attempts;
+  if (document.activeElement !== $('#prizeInput')) $('#prizeInput').value = state.prize || '';
   $('#attemptsSel').disabled = spinning;
   $('#admin').hidden = !token;
   $('#adminLink').hidden = Boolean(token);
@@ -385,15 +440,17 @@ function connect() {
   const es = new EventSource('/events');
   const status = $('#status');
   es.onopen = () => {
-    status.textContent = 'EN VIVO';
-    status.className = 'badge on';
+    connected = true;
+    updatePresentation();
   };
   es.onerror = () => {
+    connected = false;
     status.textContent = 'RECONECTANDO';
     status.className = 'badge off';
   };
   es.addEventListener('state', (e) => {
     state = JSON.parse(e.data);
+    if (state.serverNow) serverOffset = Date.parse(state.serverNow) - Date.now();
     if (state.spin && (!anim || anim.id !== state.spin.id)) startSpin(state.spin);
     render();
   });
@@ -437,8 +494,30 @@ async function adminAction(path, body) {
     return await api(path, body);
   } catch (err) {
     $('#adminMsg').textContent = err.message;
+    await showActionModal({ title: 'Atención', message: err.message, confirmText: 'Entendido' });
     return null;
   }
+}
+
+let actionResolve = null;
+
+function showActionModal({ title, message, confirmText = 'Aceptar', cancelText = '', danger = false }) {
+  const dialog = $('#actionDialog');
+  $('#actionTitle').textContent = title;
+  $('#actionMessage').textContent = message;
+  $('#actionConfirm').textContent = confirmText;
+  $('#actionConfirm').className = danger ? 'danger' : 'gold';
+  $('#actionCancel').textContent = cancelText || 'Cancelar';
+  $('#actionCancel').hidden = !cancelText;
+  dialog.showModal();
+  return new Promise((resolve) => { actionResolve = resolve; });
+}
+
+function closeActionModal(result) {
+  $('#actionDialog').close();
+  const resolve = actionResolve;
+  actionResolve = null;
+  if (resolve) resolve(result);
 }
 
 function previewList() {
@@ -450,7 +529,22 @@ $('#overlay').addEventListener('click', () => hideOverlay());
 $('#adminLink').addEventListener('click', () => $('#loginDialog').showModal());
 $('#loginCancel').addEventListener('click', () => $('#loginDialog').close());
 $('#logoutBtn').addEventListener('click', logout);
-$('#spinBtn').addEventListener('click', () => adminAction('/api/spin'));
+$('#actionCancel').addEventListener('click', () => closeActionModal(false));
+$('#actionConfirm').addEventListener('click', () => closeActionModal(true));
+$('#actionDialog').addEventListener('cancel', (e) => {
+  e.preventDefault();
+  closeActionModal(false);
+});
+$('#spinBtn').addEventListener('click', async () => {
+  const prize = $('#prizeInput').value.trim();
+  if (!prize) {
+    await showActionModal({ title: 'Premio obligatorio', message: 'Ingresa el nombre del premio antes de girar la ruleta.', confirmText: 'Ingresar premio' });
+    $('#prizeInput').focus();
+    return;
+  }
+  if (prize !== state.prize && !(await adminAction('/api/prize', { prize }))) return;
+  await adminAction('/api/spin');
+});
 $('#shuffleBtn').addEventListener('click', () => adminAction('/api/shuffle'));
 $('#search').addEventListener('input', () => renderParticipants((state.slots || []).length));
 $('#listText').addEventListener('input', previewList);
@@ -473,19 +567,42 @@ $('#attemptsSel').addEventListener('change', async (e) => {
   render();
 });
 
-$('#resetBtn').addEventListener('click', () => {
-  if (confirm('¿Reiniciar el sorteo? Se restaura la lista cargada y se borra el historial de resultados.')) adminAction('/api/reset');
+$('#resetBtn').addEventListener('click', async () => {
+  const accepted = await showActionModal({ title: 'Reiniciar sorteo', message: 'Se restaurará la lista cargada y se borrará todo el historial de resultados.', confirmText: 'Reiniciar', cancelText: 'Cancelar', danger: true });
+  if (accepted) await adminAction('/api/reset');
+});
+
+$('#clearBtn').addEventListener('click', async () => {
+  const accepted = await showActionModal({ title: 'Nuevo sorteo', message: 'Se borrarán todos los participantes, cupos, resultados y el premio actual. Esta acción no se puede deshacer.', confirmText: 'Borrar todo', cancelText: 'Cancelar', danger: true });
+  if (!accepted) return;
+  if (await adminAction('/api/clear')) {
+    $('#listForm').reset();
+    $('#partForm').reset();
+    $('#prizeInput').value = '';
+    previewList();
+    $('#adminMsg').textContent = 'Sorteo limpiado. Ya puedes cargar una nueva lista.';
+  }
+});
+
+$('#finishBtn').addEventListener('click', async () => {
+  const winners = state.history.filter((entry) => entry.win).length;
+  const accepted = await showActionModal({ title: 'Finalizar sorteo', message: `Se mostrarán públicamente ${winners} ganador${winners === 1 ? '' : 'es'} junto con sus premios.`, confirmText: 'Finalizar', cancelText: 'Cancelar' });
+  if (!accepted) return;
+  await adminAction('/api/finish');
 });
 
 $('#listForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (state.participants.length && !confirm('¿Cargar esta lista? Reemplaza a los participantes actuales y borra el historial de resultados.')) return;
+  if (state.participants.length) {
+    const accepted = await showActionModal({ title: 'Reemplazar participantes', message: 'La nueva lista reemplazará a todos los participantes actuales y borrará el historial de resultados.', confirmText: 'Cargar lista', cancelText: 'Cancelar' });
+    if (!accepted) return;
+  }
   const result = await adminAction('/api/list', { text: $('#listText').value });
   if (!result) return;
   e.target.reset();
   previewList();
   $('#adminMsg').textContent = '';
-  alert(`Lista cargada: ${result.participants} participantes y ${result.cupos} cupos.`);
+  await showActionModal({ title: 'Lista cargada', message: `${result.participants} participantes y ${result.cupos} cupos están listos para el sorteo.`, confirmText: 'Aceptar' });
 });
 
 $('#prizeForm').addEventListener('submit', (e) => {
@@ -522,3 +639,4 @@ setInterval(() => {
 if (token) api('/api/check').catch(() => {});
 render();
 connect();
+setInterval(updatePresentation, 1000);

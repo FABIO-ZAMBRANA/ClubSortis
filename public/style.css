@@ -80,6 +80,40 @@ main {
   padding: 22px;
 }
 
+.event-view {
+  width: min(1180px, calc(100% - 32px));
+  min-height: calc(100vh - 150px);
+  margin: 24px auto;
+}
+
+.countdown-view {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(320px, 1.15fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 64px);
+}
+
+.event-copy { text-align: center; }
+.eyebrow { font-family: var(--sans); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.28em; color: var(--gold); }
+.event-copy h2, .final-heading h2 { margin: 12px 0; font-size: clamp(2rem, 6vw, 4.8rem); line-height: 0.96; color: var(--gold-light); text-shadow: 0 0 28px rgba(212, 175, 55, 0.3); }
+.event-date { margin: 18px 0 24px; font-family: var(--sans); font-weight: 700; text-transform: capitalize; color: #fff; }
+.event-poster { display: block; width: 100%; max-height: calc(100vh - 125px); object-fit: contain; border: 1px solid rgba(92, 184, 255, 0.45); border-radius: 20px; box-shadow: 0 0 50px rgba(45, 125, 255, 0.25), 0 20px 60px rgba(0, 0, 0, 0.65); }
+.countdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.countdown div { padding: 16px 5px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(180deg, rgba(40, 31, 8, 0.9), rgba(5, 5, 5, 0.92)); box-shadow: inset 0 0 20px rgba(212, 175, 55, 0.08); }
+.countdown b { display: block; font-family: var(--sans); font-size: clamp(1.65rem, 4vw, 3rem); color: var(--gold-light); }
+.countdown span { font-family: var(--sans); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.waiting-note { max-width: 520px; margin: 18px auto 0; font-family: var(--sans); font-size: 0.86rem; line-height: 1.55; color: var(--muted); }
+
+.final-view { display: flex; flex-direction: column; justify-content: center; }
+.final-heading { margin-bottom: 34px; text-align: center; }
+.final-heading p { font-family: var(--sans); color: var(--muted); }
+.final-winners { display: grid; gap: 14px; width: min(900px, 100%); margin: 0 auto; }
+.final-winner { display: grid; grid-template-columns: 130px minmax(0, 1fr) minmax(180px, 0.8fr); align-items: center; gap: 18px; padding: 20px 24px; border: 1px solid var(--gold); border-radius: 16px; background: radial-gradient(circle at 0 50%, rgba(212, 175, 55, 0.2), var(--panel) 45%); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+.final-place { font-family: var(--sans); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.12em; color: var(--gold); }
+.final-name { min-width: 0; font-size: clamp(1.15rem, 3vw, 1.8rem); color: var(--gold-light); overflow-wrap: anywhere; }
+.final-prize { padding-left: 18px; border-left: 1px solid var(--border); font-family: var(--sans); font-weight: 700; color: #fff; }
+.final-empty { text-align: center; color: var(--muted); }
+
 .stage { text-align: center; }
 .prize { min-height: 1.3em; margin: 0 0 8px; font-size: 1.35rem; color: var(--gold-light); }
 
@@ -236,6 +270,7 @@ aside { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 .field .row { margin-top: 0; }
 .row input { flex: 1; min-width: 90px; }
 .hint, .msg { margin: 8px 0 0; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); }
+.test-note { padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--gold-light); background: rgba(212, 175, 55, 0.08); }
 .msg { min-height: 1.2em; color: #ff8a8a; }
 
 textarea { display: block; width: 100%; resize: vertical; }
@@ -342,6 +377,13 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(3px); 
 dialog input { width: 100%; }
 dialog .row { justify-content: flex-end; }
 
+.action-dialog { width: min(92vw, 440px); text-align: center; border-color: var(--border); box-shadow: 0 0 70px rgba(212, 175, 55, 0.25); }
+.action-dialog h2 { margin-bottom: 10px; font-size: 1.15rem; color: var(--gold-light); }
+.modal-icon { width: 46px; height: 46px; margin: 0 auto 14px; display: grid; place-items: center; border: 1px solid var(--gold); border-radius: 50%; font-size: 1.5rem; color: var(--gold-light); background: rgba(212, 175, 55, 0.1); box-shadow: 0 0 20px rgba(212, 175, 55, 0.2); }
+.modal-message { margin: 0; font-family: var(--sans); line-height: 1.55; color: var(--text); }
+.modal-actions { justify-content: center !important; margin-top: 20px !important; }
+.modal-actions button { min-width: 120px; }
+
 @media (max-width: 860px) {
   main { grid-template-columns: 1fr; padding: 12px; gap: 14px; }
   header { padding: 8px 12px; gap: 10px; }
@@ -352,4 +394,8 @@ dialog .row { justify-content: flex-end; }
   .stat span { font-size: 0.6rem; }
   .winner-card { padding: 26px 22px; }
   footer { flex-direction: column; text-align: center; }
+  .countdown-view { grid-template-columns: 1fr; }
+  .event-poster { max-height: none; }
+  .final-winner { grid-template-columns: 1fr; gap: 7px; text-align: center; }
+  .final-prize { padding: 9px 0 0; border-top: 1px solid var(--border); border-left: 0; }
 }
