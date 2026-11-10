@@ -269,6 +269,22 @@ function renderParticipants(total) {
   });
 }
 
+function renderOrder() {
+  const order = $('#order');
+  const nums = state.nums || [];
+  order.replaceChildren();
+  if (!(state.slots || []).length) order.append(el('li', 'empty', 'Aún no hay casillas'));
+  (state.slots || []).forEach((name, i) => {
+    const li = el('li');
+    const label = el('span');
+    const dot = el('span', 'dot');
+    dot.style.background = colorOf(name)[0];
+    label.append(dot, `${nums[i]}. ${name}`);
+    li.append(label);
+    order.append(li);
+  });
+}
+
 function render() {
   const active = state.participants.filter((p) => p.cupos > 0);
   const total = (state.slots || []).length;
@@ -283,7 +299,9 @@ function render() {
   renderRound(total);
   renderHistory();
   renderParticipants(total);
+  renderOrder();
 
+  $('#shuffleBtn').disabled = spinning || total < 2;
   $('#spinBtn').disabled = spinning || !total;
   $('#spinBtn').textContent = spinning ? 'GIRANDO...' : state.attempts > 1 ? `GIRAR · INTENTO ${state.attempt + 1}/${state.attempts}` : 'GIRAR RULETA';
   if (document.activeElement !== $('#attemptsSel')) $('#attemptsSel').value = state.attempts;
@@ -334,7 +352,7 @@ function confetti() {
 }
 
 function showOverlay(entry) {
-  const where = `Giro #${entry.n} · casilla ${entry.ticket} de ${entry.total}`;
+  const where = `Cupo n.º ${entry.num} · giro #${entry.n}`;
   $('#card').classList.toggle('miss', !entry.win);
   $('#cardIcon').textContent = entry.win ? '♛' : '✕';
   $('#winnerName').textContent = entry.name;
@@ -433,6 +451,7 @@ $('#adminLink').addEventListener('click', () => $('#loginDialog').showModal());
 $('#loginCancel').addEventListener('click', () => $('#loginDialog').close());
 $('#logoutBtn').addEventListener('click', logout);
 $('#spinBtn').addEventListener('click', () => adminAction('/api/spin'));
+$('#shuffleBtn').addEventListener('click', () => adminAction('/api/shuffle'));
 $('#search').addEventListener('input', () => renderParticipants((state.slots || []).length));
 $('#listText').addEventListener('input', previewList);
 

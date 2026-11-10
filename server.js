@@ -32,7 +32,8 @@ if (!ADMIN_PASSWORD) {
 }
 
 const copyList = (list) => list.map((p) => ({ ...p }));
-const freshState = (base = [], attempts = 1) => ({ participants: copyList(base), base, slots: buildSlots(base), history: [], prize: '', rest: 0, attempts, attempt: 0 });
+const layout = (list) => ({ slots: list.map((s) => s.name), nums: list.map((s) => s.n) });
+const freshState = (base = [], attempts = 1) => ({ participants: copyList(base), base, ...layout(buildSlots(base)), history: [], prize: '', rest: 0, attempts, attempt: 0 });
 
 function buildSlots(participants) {
   const rand = () => crypto.randomInt(1e9) / 1e9;
@@ -40,10 +41,17 @@ function buildSlots(participants) {
     .flatMap((p) => {
       const offset = rand();
       const casillas = p.cupos;
-      return Array.from({ length: casillas }, (_, k) => ({ name: p.name, key: (k + offset) / casillas, tie: rand() }));
+      return Array.from({ length: casillas }, (_, k) => ({ name: p.name, n: k + 1, key: (k + offset) / casillas, tie: rand() }));
     })
-    .sort((a, b) => a.key - b.key || a.tie - b.tie)
-    .map((s) => s.name);
+    .sort((a, b) => a.key - b.key || a.tie - b.tie);
+}
+
+function shuffleSlots() {
+  for (let i = state.slots.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [state.slots[i], state.slots[j]] = [state.slots[j], state.slots[i]];
+    [state.nums[i], state.nums[j]] = [state.nums[j], state.nums[i]];
+  }
 }
 
 const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').trim().replace(/\s+/g, ' ').toUpperCase();
@@ -51,7 +59,7 @@ const cleanName = (s) => String(s || '').replace(/^\s*\d+\s*[.)\-:]*\s*/, '').tr
 function loadState() {
   try {
     const s = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, ...s };
+    if (Array.isArray(s.participants) && Array.isArray(s.history) && Array.isArray(s.base) && Array.isArray(s.slots)) return { attempts: 1, attempt: 0, nums: s.slots.map((_, i) => i + 1), ...s };
   } catch {}
   return freshState();
 }
@@ -70,6 +78,7 @@ function saveState() {
 const publicState = () => ({
   participants: state.participants,
   slots: state.slots,
+  nums: state.nums,
   history: state.history,
   prize: state.prize,
   rest: state.rest,
@@ -153,11 +162,12 @@ function startSpin(res) {
   setTimeout(() => {
     state.attempt += 1;
     const win = state.attempt >= state.attempts;
-    const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, total, prize: state.prize, win, attempt: state.attempt, attempts: state.attempts, at: new Date().toISOString() };
+    const entry = { n: state.history.length + 1, name: winner.name, ticket: ticket + 1, num: state.nums[ticket], total, prize: state.prize, win, attempt: state.attempt, attempts: state.attempts, at: new Date().toISOString() };
     if (win) state.attempt = 0;
     const p = state.participants.find((x) => x.name === winner.name);
     if (p) p.cupos = Math.max(0, p.cupos - 1);
     state.slots.splice(ticket, 1);
+    state.nums.splice(ticket, 1);
     state.history.push(entry);
     state.rest = fraction;
     spin = null;
@@ -197,7 +207,7 @@ function setParticipant(res, body) {
   }
   state.base = state.base.filter((p) => p.cupos > 0);
   state.participants = state.participants.filter((p) => p.cupos > 0 || state.history.some((h) => h.name === p.name));
-  state.slots = buildSlots(state.participants);
+  Object.assign(state, layout(buildSlots(state.participants)));
   saveState();
   broadcastState();
   json(res, 200, { ok: true });
@@ -219,6 +229,8 @@ async function handleApi(req, res, url) {
   if (url === '/api/participant') return setParticipant(res, body);
   if (url === '/api/prize') {
     state.prize = String(body.prize || '').trim().slice(0, 80);
+  } else if (url === '/api/shuffle') {
+    shuffleSlots();
   } else if (url === '/api/attempts') {
     const attempts = Number(body.attempts);
     if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) return json(res, 400, { error: 'Intentos inválidos (1 a 10)' });

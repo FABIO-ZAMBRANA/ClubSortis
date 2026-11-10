@@ -273,6 +273,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .big:not(:disabled) { animation: glow 2s infinite; }
 @keyframes glow { 50% { box-shadow: 0 0 42px rgba(212, 175, 55, 0.75); } }
 .outline { background: transparent; color: var(--gold); }
+.wide { width: 100%; margin-top: 10px; }
 .danger { background: transparent; border-color: var(--red); color: #ff8a8a; }
 .link { border: 0; background: none; color: var(--muted); font-weight: 400; text-decoration: underline; }
 .icon-btn { padding: 6px 12px; border-color: var(--border); background: transparent; color: var(--muted); font-size: 0.75rem; font-weight: 400; }
